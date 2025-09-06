@@ -43,6 +43,7 @@ class SelfAttention(nn.Module):
         返回:
             output: 自注意力处理后的特征，形状为 [batch_size, seq_len, output_dim]
         """
+        
         # 计算查询、键、值
         query = self.query(x)
         key = self.key(x)

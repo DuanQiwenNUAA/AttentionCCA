@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import numpy as np
 from self_attention import SelfAttention, MultiHeadSelfAttention, apply_self_attention
+from cross_attention import CrossAttention, apply_cross_attention
 from data_preprocessing import (
     load_multi_view_data,
     normalize_data,
@@ -36,6 +37,7 @@ class AttentionCCA:
             'num_heads': 4,  # 多头自注意力的头数
             'hidden_dim': 128,  # 隐藏层维度
             'use_gpu': False,  # 是否使用GPU
+            'enable_cross_attention': False,  # 是否执行交叉注意力环节
         }
         
         # 更新配置
@@ -79,9 +81,23 @@ class AttentionCCA:
                 output_dim=self.config['view2_output_dim']
             )
             
+        # 初始化交叉注意力模型
+        self.cross_attention1 = CrossAttention(
+            input_dim1=self.config['view1_output_dim'] or self.config['view1_input_dim'],
+            input_dim2=self.config['view2_output_dim'] or self.config['view2_input_dim'],
+            hidden_dim=self.config['hidden_dim'],
+            output_dim=self.config['view1_output_dim'] or self.config['view1_input_dim']
+        )
+        self.cross_attention2 = CrossAttention(
+            input_dim1=self.config['view2_output_dim'] or self.config['view2_input_dim'],
+            input_dim2=self.config['view1_output_dim'] or self.config['view1_input_dim'],
+            hidden_dim=self.config['hidden_dim'],
+            output_dim=self.config['view2_output_dim'] or self.config['view2_input_dim']
+        )
+            
     def process_views(self, view1_data, view2_data, sequence_length1=None, sequence_length2=None):
         """
-        处理两个视图数据，应用自注意力机制
+        处理两个视图数据，应用自注意力机制和交叉注意力机制
         
         参数:
             view1_data: 第一个视图的数据
@@ -104,12 +120,24 @@ class AttentionCCA:
         processed_view1 = apply_self_attention(tensor_view1, self.view1_attention, self.device)
         processed_view2 = apply_self_attention(tensor_view2, self.view2_attention, self.device)
         
-        # 将结果转换回numpy数组（如果需要）
-        if not isinstance(view1_data, torch.Tensor):
-            processed_view1 = processed_view1.cpu().numpy()
-            processed_view2 = processed_view2.cpu().numpy()
-        
-        return processed_view1, processed_view2
+        # 应用交叉注意力机制（如果启用）
+        if self.config['enable_cross_attention']:
+            cross_view1 = apply_cross_attention(processed_view1, processed_view2, self.cross_attention1, self.device)
+            cross_view2 = apply_cross_attention(processed_view2, processed_view1, self.cross_attention2, self.device)
+            
+            # 将结果转换回numpy数组（如果需要）
+            if not isinstance(view1_data, torch.Tensor):
+                cross_view1 = cross_view1.cpu().numpy()
+                cross_view2 = cross_view2.cpu().numpy()
+            
+            return cross_view1, cross_view2
+        else:
+            # 如果不启用交叉注意力，直接返回自注意力处理结果
+            if not isinstance(view1_data, torch.Tensor):
+                processed_view1 = processed_view1.cpu().numpy()
+                processed_view2 = processed_view2.cpu().numpy()
+            
+            return processed_view1, processed_view2
 
     def save_models(self, view1_path, view2_path):
         """
@@ -175,7 +203,7 @@ class AttentionCCA:
         
         return loss
         
-    def train_model(self, train_data, num_epochs=100, batch_size=32, learning_rate=0.001):
+    def train_model(self, train_data, num_epochs=100, batch_size=32, learning_rate=0.001, train_phase='self_attention'):
         """
         训练AttentionCCA模型
         
@@ -184,9 +212,12 @@ class AttentionCCA:
             num_epochs: 训练轮数
             batch_size: 批次大小
             learning_rate: 学习率
+            train_phase: 训练阶段，'self_attention'或'cross_attention'
         
         返回:
             loss_history: 训练过程中的损失历史
+            processed_view1: 视图1处理后的特征
+            processed_view2: 视图2处理后的特征
         """
         # 解包训练数据
         view1_train, view2_train = train_data
@@ -202,8 +233,14 @@ class AttentionCCA:
         # 创建批次数据并转换为列表以便获取长度
         train_batches = list(batch_data(tensor_view1, tensor_view2, batch_size))
         
-        # 设置优化器
-        params = list(self.view1_attention.parameters()) + list(self.view2_attention.parameters())
+        # 根据训练阶段设置优化器参数
+        if train_phase == 'self_attention':
+            params = list(self.view1_attention.parameters()) + list(self.view2_attention.parameters())
+        elif train_phase == 'cross_attention' and self.config['enable_cross_attention']:
+            params = list(self.cross_attention1.parameters()) + list(self.cross_attention2.parameters())
+        else:
+            raise ValueError("Invalid train_phase or cross attention not enabled")
+            
         optimizer = optim.Adam(params, lr=learning_rate)
         
         # 记录损失历史
@@ -222,8 +259,13 @@ class AttentionCCA:
                 batch_view2 = batch_view2.to(self.device)
                 
                 # 前向传播 - 使用训练模式
-                processed_view1 = apply_self_attention(batch_view1, self.view1_attention, self.device, train_mode=True)
-                processed_view2 = apply_self_attention(batch_view2, self.view2_attention, self.device, train_mode=True)
+                if train_phase == 'self_attention':
+                    processed_view1 = apply_self_attention(batch_view1, self.view1_attention, self.device, train_mode=True)
+                    processed_view2 = apply_self_attention(batch_view2, self.view2_attention, self.device, train_mode=True)
+                elif train_phase == 'cross_attention':
+                    # 应用交叉注意力
+                    processed_view1 = apply_cross_attention(train_data[0], train_data[1], self.cross_attention1, self.device, train_mode=True)
+                    processed_view2 = apply_cross_attention(train_data[1], train_data[0], self.cross_attention2, self.device, train_mode=True)
                 
                 # 计算损失
                 loss = self._correlation_loss(processed_view1, processed_view2)
@@ -242,12 +284,12 @@ class AttentionCCA:
             
             # 打印训练进度
             if (epoch + 1) % 10 == 0:
-                print(f"Epoch {epoch+1}/{num_epochs}, Loss: {avg_epoch_loss:.6f}")
+                if train_phase == 'self_attention':
+                    print(f"[自注意力] Epoch {epoch+1}/{num_epochs}, Loss: {avg_epoch_loss:.6f}")
+                elif train_phase == 'cross_attention':
+                    print(f"[交叉注意力] Epoch {epoch+1}/{num_epochs}, Loss: {avg_epoch_loss:.6f}")
         
-        return loss_history
-
-
-# 用于评估的辅助函数
+        return loss_history, processed_view1, processed_view2
 
 # 示例用法函数
 def demo_attention_cca():
@@ -285,16 +327,31 @@ def demo_attention_cca():
     train_data = (view1_train, view2_train)
     test_data = (view1_test, view2_test)
     
-    # 训练模型
-    loss_history = model.train_model(
+    # 训练自注意力模型
+    print("===== 训练自注意力模型 =====")
+    self_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
         num_epochs=50,  # 训练轮数
         batch_size=32,  # 批次大小
-        learning_rate=0.001  # 学习率
+        learning_rate=0.001,  # 学习率
+        train_phase='self_attention'
     )
     
-    # 保存训练后的模型
+    # 保存训练后的自注意力模型
     model.save_models('view1_attention_model.pth', 'view2_attention_model.pth')
+    
+    # 训练交叉注意力模型
+    print("\n===== 训练交叉注意力模型 =====")
+    model.config['enable_cross_attention'] = True
+    # 使用自注意力模型的输出作为交叉注意力的输入
+    train_data = (processed_view1.detach().numpy(), processed_view2.detach().numpy())
+    cross_loss_history, processed_view1, processed_view2 = model.train_model(
+        train_data=train_data,
+        num_epochs=50,  # 训练轮数
+        batch_size=32,  # 批次大小
+        learning_rate=0.001,  # 学习率
+        train_phase='cross_attention'
+    )
     print("\n模型已保存到view1_attention_model.pth和view2_attention_model.pth")
     
     # 使用训练后的模型处理数据
