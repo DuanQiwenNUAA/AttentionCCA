@@ -55,19 +55,19 @@ def prepare_for_attention(view_data, sequence_length=None):
     返回:
         prepared_data: 处理后的数据，形状为 [n_samples, seq_len, feature_dim]
     """
-    # 确保数据是numpy数组
-    if isinstance(view_data, torch.Tensor):
-        view_data = view_data.detach().numpy()
-    else:
-        view_data = np.array(view_data)
+    # # 确保数据是numpy数组
+    # if isinstance(view_data, torch.Tensor):
+    #     view_data = view_data.detach().numpy()
+    # else:
+    #     view_data = np.array(view_data)
     
-    # 获取数据形状
-    if len(view_data.shape) == 1:
-        # 一维数据转换为二维
-        view_data = view_data.reshape(-1, 1)
-    elif len(view_data.shape) > 2:
-        # 对于高维数据，将其展平为二维
-        view_data = view_data.reshape(view_data.shape[0], -1)
+    # # 获取数据形状
+    # if len(view_data.shape) == 1:
+    #     # 一维数据转换为二维
+    #     view_data = view_data.reshape(-1, 1)
+    # elif len(view_data.shape) > 2:
+    #     # 对于高维数据，将其展平为二维
+    #     view_data = view_data.reshape(view_data.shape[0], -1)
         
     # 获取样本数量和特征维度
     n_samples, n_features = view_data.shape

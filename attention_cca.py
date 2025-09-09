@@ -37,7 +37,7 @@ class AttentionCCA:
             'num_heads': 4,  # 多头自注意力的头数
             'hidden_dim': 128,  # 隐藏层维度
             'use_gpu': False,  # 是否使用GPU
-            'enable_cross_attention': False,  # 是否执行交叉注意力环节
+            'enable_cross_attention': True,  # 是否执行交叉注意力环节
         }
         
         # 更新配置
@@ -52,7 +52,7 @@ class AttentionCCA:
         
     def _init_attention_models(self):
         """
-        初始化自注意力模型
+        初始化注意力模型
         """
         if self.config['attention_type'] == 'single':
             # 单头自注意力
@@ -264,8 +264,8 @@ class AttentionCCA:
                     processed_view2 = apply_self_attention(batch_view2, self.view2_attention, self.device, train_mode=True)
                 elif train_phase == 'cross_attention':
                     # 应用交叉注意力
-                    processed_view1 = apply_cross_attention(train_data[0], train_data[1], self.cross_attention1, self.device, train_mode=True)
-                    processed_view2 = apply_cross_attention(train_data[1], train_data[0], self.cross_attention2, self.device, train_mode=True)
+                    processed_view1 = apply_cross_attention(batch_view1, batch_view2, self.cross_attention1, self.device, train_mode=True)
+                    processed_view2 = apply_cross_attention(batch_view2, batch_view1, self.cross_attention2, self.device, train_mode=True)
                 
                 # 计算损失
                 loss = self._correlation_loss(processed_view1, processed_view2)
@@ -332,7 +332,7 @@ def demo_attention_cca():
     self_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
         num_epochs=50,  # 训练轮数
-        batch_size=32,  # 批次大小
+        batch_size=view1_train.shape[0],  # 批次大小
         learning_rate=0.001,  # 学习率
         train_phase='self_attention'
     )
@@ -344,14 +344,17 @@ def demo_attention_cca():
     print("\n===== 训练交叉注意力模型 =====")
     model.config['enable_cross_attention'] = True
     # 使用自注意力模型的输出作为交叉注意力的输入
-    train_data = (processed_view1.detach().numpy(), processed_view2.detach().numpy())
+    train_data = (torch.squeeze(processed_view1,dim = 1).detach().numpy(), torch.squeeze(processed_view2,dim = 1).detach().numpy())
     cross_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
         num_epochs=50,  # 训练轮数
-        batch_size=32,  # 批次大小
+        batch_size=view1_train.shape[0],  # 批次大小
         learning_rate=0.001,  # 学习率
         train_phase='cross_attention'
     )
+
+    # 保存训练后的交叉注意力模型
+    model.save_models('view1_attention_model.pth', 'view2_attention_model.pth')
     print("\n模型已保存到view1_attention_model.pth和view2_attention_model.pth")
     
     # 使用训练后的模型处理数据
