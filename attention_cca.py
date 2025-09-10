@@ -404,13 +404,12 @@ def demo_attention_cca():
     print(f"  视图1 MNC分数: {mnc_view1:.4f}")
     print(f"  视图2 MNC分数: {mnc_view2:.4f}")
     
-    
     # 训练交叉注意力模型
     print("\n===== 训练交叉注意力模型 =====")
     model.config['enable_cross_attention'] = True
 
-    # 使用自注意力模型的输出作为交叉注意力的输入
-    train_data = (torch.squeeze(processed_view1,dim = 1).detach().numpy(), torch.squeeze(processed_view2,dim = 1).detach().numpy())
+    # 使用自注意力模型的输出，使用加权后的输出作为交叉注意力的输入
+    train_data = (pds_view1 * torch.squeeze(processed_view1,dim = 1).detach().numpy(), pds_view2 * torch.squeeze(processed_view2,dim = 1).detach().numpy())
     cross_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
         num_epochs=50,  # 训练轮数
