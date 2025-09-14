@@ -323,15 +323,28 @@ def demo_attention_cca():
     # 初始化模型
     model = AttentionCCA(config)
     
-    # # 使用未训练的模型处理数据
-    # print("===== 未训练模型的处理结果 =====")
-    # untrained_view1, untrained_view2 = model.process_views(view1_data, view2_data)
-    # print(f"\n测试数据形状:")
-    # print(f"  视图1形状: {view1_data.shape}")
-    # print(f"  视图2形状: {view2_data.shape}")
-    # print(f"训练后处理结果形状:")
-    # print(f"  视图1形状: {untrained_view1.shape}")
-    # print(f"  视图2形状: {untrained_view2.shape}")
+    # 使用未训练的模型处理数据
+    print("===== 未训练模型的处理结果 =====")
+    untrained_view1, untrained_view2 = model.process_views(view1_data, view2_data)
+    print(f"\n测试数据形状:")
+    print(f"  视图1形状: {view1_data.shape}")
+    print(f"  视图2形状: {view2_data.shape}")
+    print(f"训练后处理结果形状:")
+    print(f"  视图1形状: {untrained_view1.shape}")
+    print(f"  视图2形状: {untrained_view2.shape}")
+
+    # 评估原始视图的Kmeans聚类效果
+    print("\n原始视图的Kmeans聚类效果:")
+    original_kmeans_result = evaluate_kmeans_clustering(view1_data, view2_data)
+    print(f"  视图1轮廓系数: {original_kmeans_result['view1_silhouette']:.4f}")
+    print(f"  视图2轮廓系数: {original_kmeans_result['view2_silhouette']:.4f}")
+    print(f"  联合轮廓系数: {original_kmeans_result['joint_silhouette']:.4f}")
+
+    print("\n处理后视图的Kmeans聚类效果:")
+    processed_kmeans_result = evaluate_kmeans_clustering(untrained_view1, untrained_view2)
+    print(f"  视图1轮廓系数: {processed_kmeans_result['view1_silhouette']:.4f}")
+    print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
+    print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
 
     # # 评估处理前后视图之间的相关性
     # print("\n评估处理前后视图之间的相关性:")
