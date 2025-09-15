@@ -121,6 +121,10 @@ class AttentionCCA:
         # 应用自注意力机制
         processed_view1 = apply_self_attention(tensor_view1, self.view1_attention, self.device)
         processed_view2 = apply_self_attention(tensor_view2, self.view2_attention, self.device)
+
+        #计算PDS分数
+        pds_view1 = compute_pds(torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy())
+        pds_view2 = compute_pds(torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
         
         # 应用交叉注意力机制（如果启用）
         if self.config['enable_cross_attention']:
@@ -450,8 +454,8 @@ def demo_attention_cca():
     print(f"  视图1形状: {view1_test.shape}")
     print(f"  视图2形状: {view2_test.shape}")
     print(f"训练后处理结果形状:")
-    print(f"  视图1形状: {trained_view1.shape}")
-    print(f"  视图2形状: {trained_view2.shape}")
+    print(f"  视图1形状: {trained_view1.squeeze().shape}")
+    print(f"  视图2形状: {trained_view2.squeeze().shape}")
     
     # # 评估处理前后视图之间的相关性
     # print("\n评估处理前后视图之间的相关性:")
