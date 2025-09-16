@@ -40,6 +40,7 @@ class AttentionCCA:
             'hidden_dim': 128,  # 隐藏层维度
             'use_gpu': False,  # 是否使用GPU
             'enable_cross_attention': True,  # 是否执行交叉注意力环节
+            'enable_complexity_analysis': True,  # 是否执行复杂度分析
         }
         
         # 更新配置
@@ -128,9 +129,14 @@ class AttentionCCA:
         
         # 应用交叉注意力机制（如果启用）
         if self.config['enable_cross_attention']:
-            cross_view1 = apply_cross_attention(pds_view1 * processed_view1, pds_view2 * processed_view2, self.cross_attention1, self.device)
-            cross_view2 = apply_cross_attention(pds_view2 * processed_view2, pds_view1 * processed_view1, self.cross_attention2, self.device)
-            
+            # 应用加权（如果启用）
+            if self.config['enable_complexity_analysis']:
+                cross_view1 = apply_cross_attention(abs(pds_view1) * processed_view1, abs(pds_view2) * processed_view2, self.cross_attention1, self.device)
+                cross_view2 = apply_cross_attention(abs(pds_view2) * processed_view2, abs(pds_view1) * processed_view1, self.cross_attention2, self.device)               
+            else:
+                cross_view1 = apply_cross_attention(processed_view1, processed_view2, self.cross_attention1, self.device)
+                cross_view2 = apply_cross_attention(processed_view2, processed_view1, self.cross_attention2, self.device)
+
             # 将结果转换回numpy数组（如果需要）
             if not isinstance(view1_data, torch.Tensor):
                 cross_view1 = cross_view1.cpu().numpy()
@@ -336,7 +342,9 @@ def demo_attention_cca():
         'attention_type': 'multihead',
         'num_heads': 4,
         'hidden_dim': 128,
-        'use_gpu': True
+        'use_gpu': True,
+        'enable_cross_attention': True,
+        'enable_complexity_analysis': True,
     }
     
     # 初始化模型
@@ -426,10 +434,14 @@ def demo_attention_cca():
     print("\n===== 训练交叉注意力模型 =====")
     model.config['enable_cross_attention'] = True
 
-    # 使用自注意力模型的输出，使用加权后的输出作为交叉注意力的输入
-    # train_data = (pds_view1 * torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), pds_view2 * torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
-    # 使用自注意力模型的输出作为交叉注意力的输入
-    train_data = (torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
+    # 使用自注意力模型的输出，使用加权后的输出作为交叉注意力的输入（如果启用加权）
+    if model.config['enable_complexity_analysis']:
+        train_data = (abs(pds_view1) * torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), abs(pds_view2) * torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
+    else:
+        # 使用自注意力模型的输出作为交叉注意力的输入
+        train_data = (torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
+
+    # 训练交叉注意力模型    
     cross_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
         num_epochs=200,  # 训练轮数
