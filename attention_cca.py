@@ -128,8 +128,8 @@ class AttentionCCA:
         
         # 应用交叉注意力机制（如果启用）
         if self.config['enable_cross_attention']:
-            cross_view1 = apply_cross_attention(processed_view1, processed_view2, self.cross_attention1, self.device)
-            cross_view2 = apply_cross_attention(processed_view2, processed_view1, self.cross_attention2, self.device)
+            cross_view1 = apply_cross_attention(pds_view1 * processed_view1, pds_view2 * processed_view2, self.cross_attention1, self.device)
+            cross_view2 = apply_cross_attention(pds_view2 * processed_view2, pds_view1 * processed_view1, self.cross_attention2, self.device)
             
             # 将结果转换回numpy数组（如果需要）
             if not isinstance(view1_data, torch.Tensor):
@@ -145,31 +145,50 @@ class AttentionCCA:
             
             return processed_view1, processed_view2
 
-    def save_models(self, view1_path, view2_path):
+    def save_models(self, view1_path, view2_path, cross_view1_path=None, cross_view2_path=None):
         """
-        保存自注意力模型
+        保存自注意力模型和交叉注意力模型
         
         参数:
-            view1_path: 第一个视图的模型保存路径
-            view2_path: 第二个视图的模型保存路径
+            view1_path: 第一个视图的自注意力模型保存路径
+            view2_path: 第二个视图的自注意力模型保存路径
+            cross_view1_path: 第一个视图的交叉注意力模型保存路径(可选)
+            cross_view2_path: 第二个视图的交叉注意力模型保存路径(可选)
         """
         torch.save(self.view1_attention.state_dict(), view1_path)
         torch.save(self.view2_attention.state_dict(), view2_path)
         
-    def load_models(self, view1_path, view2_path):
+        if cross_view1_path is not None and self.config['enable_cross_attention']:
+            torch.save(self.cross_attention1.state_dict(), cross_view1_path)
+        if cross_view2_path is not None and self.config['enable_cross_attention']:
+            torch.save(self.cross_attention2.state_dict(), cross_view2_path)
+        
+    def load_models(self, view1_path, view2_path, cross_view1_path=None, cross_view2_path=None):
         """
-        加载自注意力模型
+        加载自注意力模型和交叉注意力模型
         
         参数:
             view1_path: 第一个视图的模型加载路径
             view2_path: 第二个视图的模型加载路径
+            cross_view1_path: 第一个视图的交叉注意力模型加载路径(可选)
+            cross_view2_path: 第二个视图的交叉注意力模型加载路径(可选)
         """
         self.view1_attention.load_state_dict(torch.load(view1_path, map_location=self.device))
         self.view2_attention.load_state_dict(torch.load(view2_path, map_location=self.device))
         
+        # 加载交叉注意力模型（如果启用且提供了路径）
+        if self.config['enable_cross_attention']:
+            if cross_view1_path is not None:
+                self.cross_attention1.load_state_dict(torch.load(cross_view1_path, map_location=self.device))
+            if cross_view2_path is not None:
+                self.cross_attention2.load_state_dict(torch.load(cross_view2_path, map_location=self.device))
+        
         # 设置为评估模式
         self.view1_attention.eval()
         self.view2_attention.eval()
+        if self.config['enable_cross_attention']:
+            self.cross_attention1.eval()
+            self.cross_attention2.eval()
         
     def _correlation_loss(self, view1_features, view2_features):
         """
@@ -302,10 +321,6 @@ def demo_attention_cca():
     """
     演示AttentionCCA的使用方法，包括模型训练过程
     """
-    # # 创建模拟数据
-    # np.random.seed(42)
-    # view1_data = np.random.rand(100, 100)  # 100个样本，每个样本100维
-    # view2_data = np.random.rand(100, 100)  # 100个样本，每个样本100维
 
     # 四个视图，分别为：（400，512）、（400，59）、（400，864）、（400，254）
     mat_data = sio.loadmat("D:\本科毕业设计\Python_Projects\DataSets\数据集\ORL.mat")
@@ -329,13 +344,14 @@ def demo_attention_cca():
     
     # 使用未训练的模型处理数据
     print("===== 未训练模型的处理结果 =====")
+    model.config['enable_cross_attention'] = True
     untrained_view1, untrained_view2 = model.process_views(view1_data, view2_data)
     print(f"\n测试数据形状:")
     print(f"  视图1形状: {view1_data.shape}")
     print(f"  视图2形状: {view2_data.shape}")
-    print(f"训练后处理结果形状:")
-    print(f"  视图1形状: {untrained_view1.shape}")
-    print(f"  视图2形状: {untrained_view2.shape}")
+    print(f"模型处理结果形状:")
+    print(f"  视图1形状: {untrained_view1.squeeze().shape}")
+    print(f"  视图2形状: {untrained_view2.squeeze().shape}")
 
     # 评估原始视图的Kmeans聚类效果
     print("\n原始视图的Kmeans聚类效果:")
@@ -350,51 +366,9 @@ def demo_attention_cca():
     print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
     print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
 
-    # # 评估处理前后视图之间的相关性
-    # print("\n评估处理前后视图之间的相关性:")
-    # print("=========================")
-    
-    # # 先确保数据是numpy数组
-    # if isinstance(view1_data, torch.Tensor):
-    #     view1_data = view1_data.cpu().numpy()
-    # if isinstance(view2_data, torch.Tensor):
-    #     view2_data = view2_data.cpu().numpy()
-    # if isinstance(untrained_view1, torch.Tensor):
-    #     untrained_view1 = untrained_view1.cpu().numpy()
-    # if isinstance(untrained_view2, torch.Tensor):
-    #     untrained_view2 = untrained_view2.cpu().numpy()
-    
-    # # 评估原始视图间相关性
-    # original_cross_correlation_result = evaluate_attention_effect(view1_data, view2_data)
-    # original_cross_correlation = original_cross_correlation_result['cross_correlation']
-
-    # # 评估处理后视图间相关性
-    # processed_cross_correlation_result = evaluate_attention_effect(untrained_view1, untrained_view2)
-    # processed_cross_correlation = processed_cross_correlation_result['cross_correlation']
-
-    # print("\n原始视图间相关性:")
-    # print(f"  视图1形状: {original_cross_correlation_result['view1_shape']}")
-    # print(f"  视图2形状: {original_cross_correlation_result['view2_shape']}")
-    # print(f"  视图1均值: {original_cross_correlation_result['view1_mean']:.4f}")
-    # print(f"  视图2均值: {original_cross_correlation_result['view2_mean']:.4f}")
-    # print(f"  视图1方差: {original_cross_correlation_result['view1_variance']:.4f}")
-    # print(f"  视图2方差: {original_cross_correlation_result['view2_variance']:.4f}")
-    # print(f"  视图间相关性: {original_cross_correlation:.4f}")
-    
-    # print("\n处理后视图间相关性:")
-    # print(f"  视图1形状: {processed_cross_correlation_result['view1_shape']}")
-    # print(f"  视图2形状: {processed_cross_correlation_result['view2_shape']}")
-    # print(f"  视图1均值: {processed_cross_correlation_result['view1_mean']:.4f}")
-    # print(f"  视图2均值: {processed_cross_correlation_result['view2_mean']:.4f}")
-    # print(f"  视图1方差: {processed_cross_correlation_result['view1_variance']:.4f}")
-    # print(f"  视图2方差: {processed_cross_correlation_result['view2_variance']:.4f}")
-    # print(f"  视图间相关性: {processed_cross_correlation:.4f}")
-    
-    # print("\n相关性比较:")
-    # print(f"  相关性变化: {processed_cross_correlation - original_cross_correlation:.4f} ({(processed_cross_correlation - original_cross_correlation) / original_cross_correlation * 100:.2f}%)")
-    
     # 准备训练数据
     print("\n===== 开始训练模型 =====")
+
     # 分割训练和测试数据
     view1_train, view1_test, view2_train, view2_test = split_train_test(view1_data, view2_data, test_ratio=0.2)
     train_data = (view1_train, view2_train)
@@ -402,16 +376,14 @@ def demo_attention_cca():
     
     # 训练自注意力模型
     print("===== 训练自注意力模型 =====")
+    model.config['enable_cross_attention'] = False
     self_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
-        num_epochs=50,  # 训练轮数
+        num_epochs=200,  # 训练轮数
         batch_size=view1_train.shape[0],  # 批次大小
         learning_rate=0.001,  # 学习率
         train_phase='self_attention'
     )
-    
-    # 保存训练后的自注意力模型
-    model.save_models('view1_attention_model.pth', 'view2_attention_model.pth')
 
     # 计算自注意力模型输出数据的结构复杂度
     print("\n===== 计算自注意力模型输出数据的结构复杂度 =====")
@@ -426,27 +398,57 @@ def demo_attention_cca():
     # mnc_view2 = compute_mnc(torch.squeeze(processed_view2,dim = 1).detach().numpy())
     # print(f"  视图1 MNC分数: {mnc_view1:.4f}")
     # print(f"  视图2 MNC分数: {mnc_view2:.4f}")
+
+    # 使用训练好的自注意力模型，对测试集得到的结果
+    print("\n===== 使用训练好的自注意力模型对测试集处理 =====")
+    trained_view1, trained_view2 = model.process_views(view1_test, view2_test)
+    print(f"\n测试数据形状:")
+    print(f"  视图1形状: {view1_test.shape}")
+    print(f"  视图2形状: {view2_test.shape}")
+    print(f"训练后处理结果形状:")
+    print(f"  视图1形状: {trained_view1.squeeze().shape}")
+    print(f"  视图2形状: {trained_view2.squeeze().shape}")
+
+    # 评估原始视图的Kmeans聚类效果
+    print("\n原始视图的Kmeans聚类效果:")
+    original_kmeans_result = evaluate_kmeans_clustering(view1_test, view2_test)
+    print(f"  视图1轮廓系数: {original_kmeans_result['view1_silhouette']:.4f}")
+    print(f"  视图2轮廓系数: {original_kmeans_result['view2_silhouette']:.4f}")
+    print(f"  联合轮廓系数: {original_kmeans_result['joint_silhouette']:.4f}")
+
+    print("\n处理后视图的Kmeans聚类效果:")
+    processed_kmeans_result = evaluate_kmeans_clustering(trained_view1, trained_view2)
+    print(f"  视图1轮廓系数: {processed_kmeans_result['view1_silhouette']:.4f}")
+    print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
+    print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
     
     # 训练交叉注意力模型
     print("\n===== 训练交叉注意力模型 =====")
     model.config['enable_cross_attention'] = True
 
     # 使用自注意力模型的输出，使用加权后的输出作为交叉注意力的输入
-    train_data = (pds_view1 * torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), pds_view2 * torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
+    # train_data = (pds_view1 * torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), pds_view2 * torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
+    # 使用自注意力模型的输出作为交叉注意力的输入
+    train_data = (torch.squeeze(processed_view1,dim = 1).detach().cpu().numpy(), torch.squeeze(processed_view2,dim = 1).detach().cpu().numpy())
     cross_loss_history, processed_view1, processed_view2 = model.train_model(
         train_data=train_data,
-        num_epochs=50,  # 训练轮数
+        num_epochs=200,  # 训练轮数
         batch_size=view1_train.shape[0],  # 批次大小
         learning_rate=0.001,  # 学习率
         train_phase='cross_attention'
     )
 
-    # 保存训练后的交叉注意力模型
-    model.save_models('view1_attention_model.pth', 'view2_attention_model.pth')
-    print("\n模型已保存到view1_attention_model.pth和view2_attention_model.pth")
+    # 保存训练好的模型
+    model.save_models(
+        view1_path="view1_attention_model.pth",
+        view2_path="view2_attention_model.pth",
+        cross_view1_path="cross_view1_attention_model.pth",
+        cross_view2_path="cross_view2_attention_model.pth"
+    )
+    print("\n模型已保存到当前目录")
     
-    # 使用训练后的模型处理数据
-    print("\n===== 训练后模型的处理结果 =====")
+    # 使用训练后的自注意力模型和交叉注意力模型处理测试数据
+    print("\n===== 使用训练好的自注意力模型和交叉注意力模型对测试集处理 =====")
     trained_view1, trained_view2 = model.process_views(view1_test, view2_test)
     
     # 打印结果形状
@@ -457,24 +459,6 @@ def demo_attention_cca():
     print(f"  视图1形状: {trained_view1.squeeze().shape}")
     print(f"  视图2形状: {trained_view2.squeeze().shape}")
     
-    # # 评估处理前后视图之间的相关性
-    # print("\n评估处理前后视图之间的相关性:")
-    # print("=========================")
-    
-    # # 先确保数据是numpy数组
-    # if isinstance(view1_test, torch.Tensor):
-    #     view1_test = view1_test.cpu().numpy()
-    # if isinstance(view2_test, torch.Tensor):
-    #     view2_test = view2_test.cpu().numpy()
-    # if isinstance(trained_view1, torch.Tensor):
-    #     trained_view1 = trained_view1.cpu().numpy()
-    # if isinstance(trained_view2, torch.Tensor):
-    #     trained_view2 = trained_view2.cpu().numpy()
-    
-    # # 评估原始视图间相关性
-    # original_cross_correlation_result = evaluate_attention_effect(view1_test, view2_test)
-    # original_cross_correlation = original_cross_correlation_result['cross_correlation']
-    
     # 评估原始视图的Kmeans聚类效果
     print("\n原始视图的Kmeans聚类效果:")
     original_kmeans_result = evaluate_kmeans_clustering(view1_test, view2_test)
@@ -482,37 +466,12 @@ def demo_attention_cca():
     print(f"  视图2轮廓系数: {original_kmeans_result['view2_silhouette']:.4f}")
     print(f"  联合轮廓系数: {original_kmeans_result['joint_silhouette']:.4f}")
     
-    # # 评估处理后视图间相关性
-    # processed_cross_correlation_result = evaluate_attention_effect(trained_view1, trained_view2)
-    # processed_cross_correlation = processed_cross_correlation_result['cross_correlation']
-    
     # 评估处理后视图的Kmeans聚类效果
     print("\n处理后视图的Kmeans聚类效果:")
     processed_kmeans_result = evaluate_kmeans_clustering(trained_view1, trained_view2)
     print(f"  视图1轮廓系数: {processed_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
     print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
-    
-    # print("\n原始视图间相关性:")
-    # print(f"  视图1形状: {original_cross_correlation_result['view1_shape']}")
-    # print(f"  视图2形状: {original_cross_correlation_result['view2_shape']}")
-    # print(f"  视图1均值: {original_cross_correlation_result['view1_mean']:.4f}")
-    # print(f"  视图2均值: {original_cross_correlation_result['view2_mean']:.4f}")
-    # print(f"  视图1方差: {original_cross_correlation_result['view1_variance']:.4f}")
-    # print(f"  视图2方差: {original_cross_correlation_result['view2_variance']:.4f}")
-    # print(f"  视图间相关性: {original_cross_correlation:.4f}")
-    
-    # print("\n处理后视图间相关性:")
-    # print(f"  视图1形状: {processed_cross_correlation_result['view1_shape']}")
-    # print(f"  视图2形状: {processed_cross_correlation_result['view2_shape']}")
-    # print(f"  视图1均值: {processed_cross_correlation_result['view1_mean']:.4f}")
-    # print(f"  视图2均值: {processed_cross_correlation_result['view2_mean']:.4f}")
-    # print(f"  视图1方差: {processed_cross_correlation_result['view1_variance']:.4f}")
-    # print(f"  视图2方差: {processed_cross_correlation_result['view2_variance']:.4f}")
-    # print(f"  视图间相关性: {processed_cross_correlation:.4f}")
-    
-    # print("\n相关性比较:")
-    # print(f"  相关性变化: {processed_cross_correlation - original_cross_correlation:.4f} ({(processed_cross_correlation - original_cross_correlation) / original_cross_correlation * 100:.2f}%)")
     
     return trained_view1, trained_view2
 
