@@ -332,6 +332,9 @@ def demo_attention_cca():
     mat_data = sio.loadmat("D:\本科毕业设计\Python_Projects\DataSets\数据集\ORL.mat")
     view1_data = mat_data['fea'][0][0]
     view2_data = mat_data['fea'][0][1]
+    labels = mat_data['gt'].squeeze()
+
+    n_clusters = 40
     
     # 创建配置
     config = {
@@ -363,22 +366,20 @@ def demo_attention_cca():
 
     # 评估原始视图的Kmeans聚类效果
     print("\n原始视图的Kmeans聚类效果:")
-    original_kmeans_result = evaluate_kmeans_clustering(view1_data, view2_data)
+    original_kmeans_result = evaluate_kmeans_clustering(view1_data, view2_data, n_clusters, labels, labels)
     print(f"  视图1轮廓系数: {original_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {original_kmeans_result['view2_silhouette']:.4f}")
-    print(f"  联合轮廓系数: {original_kmeans_result['joint_silhouette']:.4f}")
 
     print("\n处理后视图的Kmeans聚类效果:")
-    processed_kmeans_result = evaluate_kmeans_clustering(untrained_view1, untrained_view2)
+    processed_kmeans_result = evaluate_kmeans_clustering(untrained_view1, untrained_view2, n_clusters, labels, labels)
     print(f"  视图1轮廓系数: {processed_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
-    print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
 
     # 准备训练数据
     print("\n===== 开始训练模型 =====")
 
     # 分割训练和测试数据
-    view1_train, view1_test, view2_train, view2_test = split_train_test(view1_data, view2_data, test_ratio=0.2)
+    view1_train, view1_test, view2_train, view2_test, labels_train, labels_test = split_train_test(view1_data, view2_data, labels, test_ratio=0.2)
     train_data = (view1_train, view2_train)
     test_data = (view1_test, view2_test)
     
@@ -419,16 +420,14 @@ def demo_attention_cca():
 
     # 评估原始视图的Kmeans聚类效果
     print("\n原始视图的Kmeans聚类效果:")
-    original_kmeans_result = evaluate_kmeans_clustering(view1_test, view2_test)
+    original_kmeans_result = evaluate_kmeans_clustering(view1_test, view2_test, n_clusters, labels_test, labels_test)
     print(f"  视图1轮廓系数: {original_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {original_kmeans_result['view2_silhouette']:.4f}")
-    print(f"  联合轮廓系数: {original_kmeans_result['joint_silhouette']:.4f}")
 
     print("\n处理后视图的Kmeans聚类效果:")
-    processed_kmeans_result = evaluate_kmeans_clustering(trained_view1, trained_view2)
+    processed_kmeans_result = evaluate_kmeans_clustering(trained_view1, trained_view2, n_clusters, labels_test, labels_test)
     print(f"  视图1轮廓系数: {processed_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
-    print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
     
     # 训练交叉注意力模型
     print("\n===== 训练交叉注意力模型 =====")
@@ -473,17 +472,15 @@ def demo_attention_cca():
     
     # 评估原始视图的Kmeans聚类效果
     print("\n原始视图的Kmeans聚类效果:")
-    original_kmeans_result = evaluate_kmeans_clustering(view1_test, view2_test)
+    original_kmeans_result = evaluate_kmeans_clustering(view1_test, view2_test, n_clusters, labels_test, labels_test)
     print(f"  视图1轮廓系数: {original_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {original_kmeans_result['view2_silhouette']:.4f}")
-    print(f"  联合轮廓系数: {original_kmeans_result['joint_silhouette']:.4f}")
     
     # 评估处理后视图的Kmeans聚类效果
     print("\n处理后视图的Kmeans聚类效果:")
-    processed_kmeans_result = evaluate_kmeans_clustering(trained_view1, trained_view2)
+    processed_kmeans_result = evaluate_kmeans_clustering(trained_view1, trained_view2, n_clusters, labels_test, labels_test)
     print(f"  视图1轮廓系数: {processed_kmeans_result['view1_silhouette']:.4f}")
     print(f"  视图2轮廓系数: {processed_kmeans_result['view2_silhouette']:.4f}")
-    print(f"  联合轮廓系数: {processed_kmeans_result['joint_silhouette']:.4f}")
     
     return trained_view1, trained_view2
 
