@@ -332,15 +332,15 @@ def demo_attention_cca():
     import os
     
     # 创建结果文件
-    results_file = os.path.join(os.path.dirname(__file__), r'D:\硕士\AttentionCCA\AttentionCCA\Results\results.csv')
+    results_file = os.path.join(os.path.dirname(__file__), r'D:\硕士\AttentionCCA\AttentionCCA\Results_pds\Results_ORL\results_pds_ORL_2_3.csv')
     with open(results_file, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['视图', '指标名称', '指标值', '阶段'])
 
     # 四个视图，分别为：（400，512）、（400，59）、（400，864）、（400，254）
     mat_data = sio.loadmat("D:\本科毕业设计\Python_Projects\DataSets\数据集\ORL.mat")
-    view1_data = mat_data['fea'][0][0]
-    view2_data = mat_data['fea'][0][1]
+    view1_data = mat_data['fea'][0][2]
+    view2_data = mat_data['fea'][0][3]
     labels = mat_data['gt'].squeeze()
 
     n_clusters = 40
@@ -356,7 +356,7 @@ def demo_attention_cca():
         'hidden_dim': 128,
         'use_gpu': True,
         'enable_cross_attention': True,
-        'enable_complexity_analysis': False,
+        'enable_complexity_analysis': True,
     }
     
     # 初始化模型
